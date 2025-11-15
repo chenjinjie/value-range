@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+
+	checklog "github.com/chenjinjie/value-range/check-log"
+	"github.com/chenjinjie/value-range/options"
 )
 
 /*
@@ -31,9 +34,10 @@ import (
 */
 var intRangePattern = regexp.MustCompile(`^([\[\(])(\d+),([\d\-]+)([\]\)])$`)
 
-func IntValueRangerChecker(rangeStr string) *IntRange {
-	if rangeStr == "" {
+func IntValueRangerChecker(options options.Options, patternStr string) *IntRange {
+	if patternStr == "" {
 		return &IntRange{
+			options:      options,
 			originalStr:  "",
 			noRange:      true,
 			min:          0,
@@ -43,9 +47,9 @@ func IntValueRangerChecker(rangeStr string) *IntRange {
 		}
 	}
 
-	matches := intRangePattern.FindStringSubmatch(rangeStr)
+	matches := intRangePattern.FindStringSubmatch(patternStr)
 	if matches == nil {
-		panic(fmt.Sprintf("IntRange pattern not illegal: %s", rangeStr)) // 值范围描述字符串不合法
+		panic(fmt.Sprintf("IntRange pattern not illegal: %s", patternStr)) // 值范围描述字符串不合法
 	}
 
 	// 开始解析范围
@@ -100,6 +104,7 @@ func IntValueRangerChecker(rangeStr string) *IntRange {
 }
 
 type IntRange struct {
+	options     options.Options
 	originalStr string // 原始字符串表示
 	noRange     bool   // 没有数值范围限制，是 int 即可
 
@@ -111,16 +116,15 @@ type IntRange struct {
 	noLimitMax   bool
 }
 
-func (ir *IntRange) Check(value any) bool {
+func (ir *IntRange) Check(value any) (bool, *checklog.CheckLog) {
 	if ir.noRange { // 没有值范围限制，是 int/uint 即可
 		switch value.(type) {
 		case int, int8, int16, int32, int64:
-			return true
+			return true, checklog.CheckLogSuccess(fmt.Sprintf("%d", value))
 		case uint, uint8, uint16, uint32, uint64:
-			return true
+			return true, checklog.CheckLogSuccess(fmt.Sprintf("%d", value))
 		default:
-			fmt.Printf("IntRange check value: [%+v] not int type", value)
-			return false
+			return false, checklog.CheckLogFail(fmt.Sprintf("IntRange check value: [%+v] not int type", value))
 		}
 	}
 
@@ -138,8 +142,7 @@ func (ir *IntRange) Check(value any) bool {
 		i64Value = v
 	case uint:
 		if v > math.MaxInt64 {
-			fmt.Printf("IntRange check value: uint[%d] over int64 max", value)
-			return false
+			return false, checklog.CheckLogFail(fmt.Sprintf("IntRange check value: uint[%d] over int64 max", value))
 		}
 		i64Value = int64(v)
 	case uint8:
@@ -150,37 +153,35 @@ func (ir *IntRange) Check(value any) bool {
 		i64Value = int64(v)
 	case uint64:
 		if v > math.MaxInt64 {
-			fmt.Printf("IntRange check value: uint64[%d] over int64 max", value)
-			return false
+			return false, checklog.CheckLogFail(fmt.Sprintf("IntRange check value: uint64[%d] over int64 max", value))
 		}
 		i64Value = int64(v)
 	default:
-		fmt.Printf("IntRange check value: [%+v] not int type", value)
-		return false
+		return false, checklog.CheckLogFail(fmt.Sprintf("IntRange check value: [%+v] not int type", value))
 	}
 
 	if ir.inclusiveMin {
 		if i64Value < ir.min {
-			return false
+			return false, checklog.CheckLogFail(fmt.Sprintf("[%d < %d]", i64Value, ir.min))
 		}
 	} else {
 		if i64Value <= ir.min {
-			return false
+			return false, checklog.CheckLogFail(fmt.Sprintf("[%d <= %d]", i64Value, ir.min))
 		}
 	}
 
 	if !ir.noLimitMax {
 		if ir.inclusiveMax {
 			if i64Value > ir.max {
-				return false
+				return false, checklog.CheckLogFail(fmt.Sprintf("[%d > %d]", i64Value, ir.max))
 			}
 		} else {
 			if i64Value >= ir.max {
-				return false
+				return false, checklog.CheckLogFail(fmt.Sprintf("[%d >= %d]", i64Value, ir.max))
 			}
 		}
 	}
-	return true
+	return true, checklog.CheckLogSuccess(fmt.Sprintf("%d", i64Value))
 }
 
 func (ir *IntRange) ToString() string {

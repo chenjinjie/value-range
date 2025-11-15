@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug TestCfgCheck",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}",
+            "args": [
+                "-test.run",
+                "^TestCfgCheck$",
+                "-test.v"
+            ],
+            "showLog": true
+        }
+    ]
+}

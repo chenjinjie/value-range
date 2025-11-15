@@ -2,6 +2,9 @@ package expandtyperange
 
 import (
 	"fmt"
+
+	checklog "github.com/chenjinjie/value-range/check-log"
+	"github.com/chenjinjie/value-range/options"
 )
 
 func EnumValueStore() *EnumStore {
@@ -25,20 +28,18 @@ func (es *EnumStore) LoadOneEnum(enumKey string, enumData map[uint64]struct{}) b
 	return true
 }
 
-func (es *EnumStore) CheckEnumValue(enumKey string, value uint64) bool {
+func (es *EnumStore) CheckEnumValue(enumKey string, value uint64) (bool, *checklog.CheckLog) {
 	enumData, ok := es.oriEnumData[enumKey]
 	if !ok {
-		fmt.Printf("enum key not exit: %s\n", enumKey)
-		return false
+		return false, checklog.CheckLogFail(fmt.Sprintf("enum key not exit: %s\n", enumKey))
 	}
 
 	_, ok = enumData[value]
 	if !ok {
-		fmt.Printf("enum key: %s value: %d not exit\n", enumKey, value)
-		return false
+		return false, checklog.CheckLogFail(fmt.Sprintf("%d no in enum %s", value, enumKey))
 	}
 
-	return true
+	return true, checklog.CheckLogSuccess(fmt.Sprintf("%d", value))
 }
 
 func (es *EnumStore) EnumRuleExit(enumKey string) bool {
@@ -46,7 +47,7 @@ func (es *EnumStore) EnumRuleExit(enumKey string) bool {
 	return ok
 }
 
-func EnumValueRangerChecker(enumStore *EnumStore, enumKey string) *EnumRange {
+func EnumValueRangerChecker(options options.Options, enumStore *EnumStore, enumKey string) *EnumRange {
 	if enumStore == nil {
 		panic("EnumValueRangerChecker enumStore is nil")
 	}
@@ -61,11 +62,12 @@ func EnumValueRangerChecker(enumStore *EnumStore, enumKey string) *EnumRange {
 }
 
 type EnumRange struct {
+	options   options.Options
 	enumKey   string
 	enumStore *EnumStore
 }
 
-func (er *EnumRange) Check(value any) bool {
+func (er *EnumRange) Check(value any) (bool, *checklog.CheckLog) {
 	switch v := value.(type) {
 	case uint64:
 		return er.enumStore.CheckEnumValue(er.enumKey, v)
@@ -79,37 +81,31 @@ func (er *EnumRange) Check(value any) bool {
 		return er.enumStore.CheckEnumValue(er.enumKey, uint64(v))
 	case int64:
 		if v < 0 {
-			fmt.Printf("EnumRange check value negative int64: %d\n", v)
-			return false
+			return false, checklog.CheckLogFail(fmt.Sprintf("EnumRange check value negative int64: %d", v))
 		}
 		return er.enumStore.CheckEnumValue(er.enumKey, uint64(v))
 	case int32:
 		if v < 0 {
-			fmt.Printf("EnumRange check value negative int32: %d\n", v)
-			return false
+			return false, checklog.CheckLogFail(fmt.Sprintf("EnumRange check value negative int32: %d", v))
 		}
 		return er.enumStore.CheckEnumValue(er.enumKey, uint64(v))
 	case int16:
 		if v < 0 {
-			fmt.Printf("EnumRange check value negative int16: %d\n", v)
-			return false
+			return false, checklog.CheckLogFail(fmt.Sprintf("EnumRange check value negative int16: %d", v))
 		}
 		return er.enumStore.CheckEnumValue(er.enumKey, uint64(v))
 	case int8:
 		if v < 0 {
-			fmt.Printf("EnumRange check value negative int8: %d\n", v)
-			return false
+			return false, checklog.CheckLogFail(fmt.Sprintf("EnumRange check value negative int8: %d", v))
 		}
 		return er.enumStore.CheckEnumValue(er.enumKey, uint64(v))
 	case int:
 		if v < 0 {
-			fmt.Printf("EnumRange check value negative int: %d\n", v)
-			return false
+			return false, checklog.CheckLogFail(fmt.Sprintf("EnumRange check value negative int: %d", v))
 		}
 		return er.enumStore.CheckEnumValue(er.enumKey, uint64(v))
 	default:
-		fmt.Printf("EnumRange check value type no support, type: %T\n", v)
-		return false
+		return false, checklog.CheckLogFail(fmt.Sprintf("EnumRange check value type no support, type: %T", v))
 	}
 }
 

@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+
+	checklog "github.com/chenjinjie/value-range/check-log"
+	"github.com/chenjinjie/value-range/options"
 )
 
 /*
@@ -68,31 +71,40 @@ func (rs *RefStore) checkRuleExits(originalStr string) bool {
 	return ok1 || ok2 || ok3
 }
 
-func (rs *RefStore) CheckUintValue(originalStr string, value uint64) bool {
+func (rs *RefStore) CheckUintValue(originalStr string, value uint64) (bool, *checklog.CheckLog) {
 	idSet, ok := rs.mapUintRefCheckRule[originalStr]
 	if !ok {
-		return false
+		return false, checklog.CheckLogFail(fmt.Sprintf("%d not ref %s", value, originalStr))
 	}
 	_, ok = idSet[value]
-	return ok
+	if !ok {
+		return false, checklog.CheckLogFail(fmt.Sprintf("%d not ref %s", value, originalStr))
+	}
+	return ok, checklog.CheckLogSuccess(fmt.Sprintf("%d", value))
 }
 
-func (rs *RefStore) CheckIntValue(originalStr string, value int64) bool {
+func (rs *RefStore) CheckIntValue(originalStr string, value int64) (bool, *checklog.CheckLog) {
 	idSet, ok := rs.mapIntRefCheckRule[originalStr]
 	if !ok {
-		return false
+		return false, checklog.CheckLogFail(fmt.Sprintf("%d not ref %s", value, originalStr))
 	}
 	_, ok = idSet[value]
-	return ok
+	if !ok {
+		return false, checklog.CheckLogFail(fmt.Sprintf("%d not ref %s", value, originalStr))
+	}
+	return ok, checklog.CheckLogSuccess(fmt.Sprintf("%d", value))
 }
 
-func (rs *RefStore) CheckStrValue(originalStr string, value string) bool {
+func (rs *RefStore) CheckStrValue(originalStr string, value string) (bool, *checklog.CheckLog) {
 	idSet, ok := rs.mapStrRefCheckRule[originalStr]
 	if !ok {
-		return false
+		return false, checklog.CheckLogFail(fmt.Sprintf("%s not ref %s", value, originalStr))
 	}
 	_, ok = idSet[value]
-	return ok
+	if !ok {
+		return false, checklog.CheckLogFail(fmt.Sprintf("%s not ref %s", value, originalStr))
+	}
+	return ok, checklog.CheckLogSuccess(fmt.Sprintf("%s", value))
 }
 
 // 加载一条原始数据，用于后续的值范围检测
@@ -122,10 +134,10 @@ func (rs *RefStore) LoadOneOriData(key string, data any) bool {
 	return true
 }
 
-func (rs *RefStore) AddRefCheckRule(rangeStr string) string {
-	matches := refRangePattern.FindStringSubmatch(rangeStr)
+func (rs *RefStore) AddRefCheckRule(refPatternStr string) string {
+	matches := refRangePattern.FindStringSubmatch(refPatternStr)
 	if matches == nil {
-		panic(fmt.Sprintf("RefRange pattern not illegal: %s", rangeStr)) // 值范围描述字符串不合法
+		panic(fmt.Sprintf("RefRange pattern not illegal: %s", refPatternStr)) // 值范围描述字符串不合法
 	}
 
 	// 开始解析范围
@@ -278,24 +290,26 @@ func (rs *RefStore) checkListFeildType(oriData any, originalStr, fieldKey string
 	}
 }
 
-func RefValueRangerChecker(refStore *RefStore, rangeStr string) *RefRange {
+func RefValueRangerChecker(options options.Options, refStore *RefStore, refPatternStr string) *RefRange {
 	if refStore == nil {
 		panic("RefValueRangerChecker refStore is nil")
 	}
-	originalStr := refStore.AddRefCheckRule(rangeStr)
+	originalStr := refStore.AddRefCheckRule(refPatternStr)
 
 	return &RefRange{
+		options:     options,
 		originalStr: originalStr,
 		refStore:    refStore,
 	}
 }
 
 type RefRange struct {
+	options     options.Options
 	originalStr string
 	refStore    *RefStore
 }
 
-func (rf *RefRange) Check(value any) bool {
+func (rf *RefRange) Check(value any) (bool, *checklog.CheckLog) {
 	switch v := value.(type) {
 	case uint64:
 		return rf.refStore.CheckUintValue(rf.originalStr, v)
@@ -320,8 +334,7 @@ func (rf *RefRange) Check(value any) bool {
 	case string:
 		return rf.refStore.CheckStrValue(rf.originalStr, v)
 	default:
-		fmt.Printf("RefRange check value type no support, type: %T\n", v)
-		return false
+		return false, checklog.CheckLogFail(fmt.Sprintf("RefRange check value type no support, type: %T", v))
 	}
 }
 

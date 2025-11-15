@@ -2,6 +2,9 @@ package valuerange
 
 import (
 	"testing"
+
+	checklog "github.com/chenjinjie/value-range/check-log"
+	"github.com/chenjinjie/value-range/options"
 )
 
 type heroTagCfgChecker struct {
@@ -24,6 +27,11 @@ const (
 	heroCfgAttr_mp uint32 = 2
 )
 
+type heroAttrItemChecker struct {
+	Base ValueRangerChecker
+	Grow ValueRangerChecker
+}
+
 // 做一个对应的配置检测
 type heroCfgChecker struct {
 	Id      ValueRangerChecker
@@ -41,8 +49,9 @@ type heroSkinCfgChecker struct {
 }
 
 func TestCfgCheck(t *testing.T) {
+
 	/// 创建一个检测对象，并且预加载数据
-	valueRangeChecker := ValueRangeChecker()
+	valueRangeChecker := ValueRangeChecker(options.Options{OnlySaveCheckFailLog: true})
 
 	{ /// 预加载 => 不保证多线程安全
 		// 预加载配置数据
@@ -99,7 +108,10 @@ func TestCfgCheck(t *testing.T) {
 					Free: valueRangeChecker.BoolValueRangerChecker(""),
 				}),
 				Skins: valueRangeChecker.ListValueRangerChecker(valueRangeChecker.RefValueRangerChecker(heroSkinCfgKey + ".Id")), // 可用皮肤列表，引用检测 heroSkinCfg 表的 Id 字段
-				Attrs: valueRangeChecker.MapValueRangerChecker(valueRangeChecker.EnumValueRangerChecker(enumHeroCfgAttr), valueRangeChecker.IntValueRangerChecker("(0,-)")),
+				Attrs: valueRangeChecker.MapValueRangerChecker(valueRangeChecker.EnumValueRangerChecker(enumHeroCfgAttr), valueRangeChecker.StructValueRangerChecker(heroAttrItemChecker{
+					Base: valueRangeChecker.IntValueRangerChecker("[0,-)"),
+					Grow: valueRangeChecker.IntValueRangerChecker("[0,-]"),
+				})),
 			})))
 
 			valueRangeChecker.RegChecker(heroSkinCfgKey, valueRangeChecker.ListValueRangerChecker(valueRangeChecker.StructValueRangerChecker(heroSkinCfgChecker{
@@ -117,12 +129,33 @@ func TestCfgCheck(t *testing.T) {
 	}
 
 	{ /// 开始检测每张配置表的配置值 是否都符合要求
-		if !valueRangeChecker.Check(heroCfgKey, heroCfgList) {
-			t.Errorf("cfg check failed. %s ", heroCfgKey)
-			return
+		totalHaveErr := false                 // 总的检测结果，有错误就为 true
+		root := checklog.CheckLogNodeCommon() // 根节点
+
+		if ok, checkLog := valueRangeChecker.Check(heroCfgKey, heroCfgList); !ok {
+			totalHaveErr = true
+			checkLog.SetFieldKey(heroCfgKey)
+			root.AddLog(checkLog)
+
+		} else if !valueRangeChecker.OnlySaveCheckFailLog() {
+			checkLog.SetFieldKey(heroCfgKey)
+			root.AddLog(checkLog)
 		}
-		if !valueRangeChecker.Check(heroSkinCfgKey, heroSkinCfgList) {
-			t.Errorf("cfg check failed. %s ", heroSkinCfgKey)
+
+		if ok, checkLog := valueRangeChecker.Check(heroSkinCfgKey, heroSkinCfgList); !ok {
+			totalHaveErr = true
+			checkLog.SetFieldKey(heroSkinCfgKey)
+			root.AddLog(checkLog)
+
+		} else if !valueRangeChecker.OnlySaveCheckFailLog() {
+			checkLog.SetFieldKey(heroSkinCfgKey)
+			root.AddLog(checkLog)
+		}
+
+		checkLog := checklog.CheckLogWithNode(root)
+		t.Log(checkLog.ToString())
+		if totalHaveErr {
+			t.Errorf("some cfg check failed")
 			return
 		}
 	}
